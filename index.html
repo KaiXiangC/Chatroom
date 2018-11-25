@@ -1,0 +1,249 @@
+<!--
+展示用的網頁
+-->
+<!doctype html>
+<html>
+    <head>
+        <title>iKaros聊天室</title>
+        <style>
+            * { margin: 0; padding: 0; box-sizing: border-box; }
+            body { font: 13px Helvetica, Arial; }
+
+            #m{ 
+                border: 2px solid black; 
+                padding: 10px; 
+                width: 70%; 
+                margin: .5%; 
+                position: fixed; 
+                bottom: 0;
+                right:400px;
+            }
+            #send{ 
+                width: 9%; 
+                margin: .5%; 
+                background: rgb(121,2,2);
+                color:white; 
+
+                padding: 10px; 
+                position: fixed; 
+                bottom: 0;
+                right:260px;
+            }
+            #sound{ 
+                width: 9%; 
+                margin: .5%; 
+                background: rgb(121,2,2);
+                color:white; 
+
+                padding: 10px; 
+                position: fixed; 
+                bottom: 0;
+                right:130px;
+            }
+            #sound2{ 
+                width: 9%; 
+                margin: .5%; 
+                background: rgb(121,2,2);
+                color:white; 
+
+                padding: 10px; 
+                position: fixed; 
+                bottom: 0;
+                right:5px;
+            }
+            #message_block{
+                width:100%;
+                position: absolute;
+                top:0;
+                bottom:5%;
+                margin-bottom:10px;
+                margin-right:10px;
+                border: solid 2px black; 
+                overflow:auto;
+            }
+            #messages { 
+                list-style-type: none; 
+                margin: 10px; 
+
+                padding: 0; 
+            }
+            #messages li { 
+                padding: 5px 10px; 
+                font-size:16pt;
+                }
+                #messages li:nth-child(odd) { 
+                background: #eee; 
+            }
+        </style>
+
+        <script src="/socket.io/socket.io.js"></script>
+        <script src="jquery-3.3.1.min.js"></script>
+        <script>
+        var socket = io({transports: ['websocket'], upgrade: false});
+        var name;
+        var realName = "";
+        var time;
+        var isCreatingNewUser = false;
+        var is401;
+        var received401;
+        var recorder = new webkitSpeechRecognition();
+
+        
+        function isBlocking() {
+            return (isCreatingNewUser || isIdentifyingSpeaker || recognizing || is401);
+        }
+
+        function appendMessage(msg){
+            $('#messages').append($('<li>').text(msg));
+            var message = document.getElementById("message_block");
+            message.scrollTop = message.scrollHeight;
+        }
+        
+        $(document).ready(function(){
+            $('#m').hide();
+            $('#send').hide();
+            $('#sound').hide();
+            $('#sound2').hide();
+            socket.emit("send404");
+            startButton();
+            
+            socket.on("402",function() {
+                $("#messages").empty();
+            });
+            
+            socket.on("403",function() {
+                name="";
+                $("#messages").empty();
+                socket.emit("disconnect");
+                //recorder.stop();
+                //startButton();
+            });
+            
+            socket.on("setnick",function(data) { //401
+                console.log("401");
+                name=data;
+                socket.emit("startRecording");
+            });
+            
+            /*socket.on("speaking",function() {
+                console.log("speaking");
+                if (name!="") {
+                    recorder.stop();
+                    startButton();
+                }
+            });
+            
+            socket.on("spoken",function() {
+                console.log("spoken");
+                if (name!="") {
+                    recorder.start();
+                    startButton();
+                    socket.emit("startRecording");
+                }
+            });*/
+
+            //監聽新訊息事件
+            socket.on('chat message', function(data){
+                appendMessage(data.username+":"+data.msg);
+            });
+
+            socket.on('add user',function(data){
+                
+                appendMessage(data.username+"已加入");
+            });
+
+            socket.on('user left',function(data){
+                appendMessage(data.username+"已離開");
+            });
+
+            socket.on('user existed',function(data){
+                name = "guest"+Math.floor(Math.random()*10000);
+                socket.emit("add user",name);
+            });
+
+            socket.on('server restarted',function() {
+                location.reload();
+                alert('Please refresh this page.');
+            });
+            
+        });
+        
+        
+        
+        var tempBox; // 中間的辨識訊息 text input
+        var startStopButton = $('#sound'); // 「辨識/停止」按鈕
+        var recognizing = false; // 是否辨識中
+        //var autoSendMessageAfterRecognition = true;
+        //var isIdentifyingSpeaker = false;
+
+        function startButton() {
+            tempBox = $('#m'); // 取得中間的辨識訊息控制項 tempBox
+            /*if (recognizing) { // 如果正在辨識，則停止。
+                console.log('recognition stopped');
+                recognition.stop();
+                //$('#sound2').show();
+            } else { // 否則就開始辨識
+                console.log('recognition started');
+                recognition.lang = 'cmn-Hant-TW'; // 設定辨識語言
+                recognition.start(); // 開始辨識
+                //$('#sound2').hide();
+            }*/
+            recognition.lang = 'cmn-Hant-TW'; // 設定辨識語言
+            recognition.start();
+        }
+
+        if (!('webkitSpeechRecognition' in window)) {  // 如果找不到 window.webkitSpeechRecognition 這個屬性
+            // 就是不支援語音辨識，要求使用者更新瀏覽器。
+            alert("本瀏覽器不支援語音辨識，請更換瀏覽器！(Chrome 25 版以上才支援語音辨識)");
+        } else {
+            console.log('has recognition function');
+            var recognition = new webkitSpeechRecognition(); // 建立語音辨識物件 webkitSpeechRecognition
+            recognition.continuous = true; // 設定連續辨識模式
+            recognition.interimResults = false; // 設定輸出中先結果。
+
+            recognition.onstart = function() { // 開始辨識
+                recognizing = true; // 設定為辨識中
+                startStopButton.text("按此停止"); // 辨識中...按鈕改為「按此停止」。
+            };
+
+            recognition.onend = function() { // 辨識完成
+                /*recognizing = false; // 設定為「非辨識中」
+                startStopButton.text("語音輸入");  // 辨識完成...按鈕改為「開始辨識」。
+                //socket.emit('send502');
+                if (isCreatingNewUser) {
+                    createuser();
+                    return;
+                }*/
+                //console.log("end");
+                this.start();
+            };
+
+            recognition.onresult = function(event) { // 辨識有任何結果時
+                /*if (isCreatingNewUser) {
+                    console.log(event.results[0][0].transcript);
+                    realName = event.results[0][0].transcript;
+                    return;
+                }
+                if (!isIdentifyingSpeaker) {
+                    console.log(event.results[0][0].transcript);
+                    $('#m').val(event.results[0][0].transcript);
+                    if (autoSendMessageAfterRecognition) $('#send').click();
+                }*/
+                console.log(event.results[event.results.length-1][0].transcript);
+                socket.emit('chat message', event.results[event.results.length-1][0].transcript);
+                //$('#m').val(event.results[0][0].transcript);
+                //$('#send').click();
+            };
+        }
+        </script>
+    </head>
+<body>
+<div id="message_block">
+<ul id="messages"></ul>
+<div>
+<input id="m" autocomplete="off" />
+<button id="send">Send</button>
+<button id="sound">語音輸入</button>
+<button id="sound2">辨識是誰在說話</button>
+</body>
+</html>
