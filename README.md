@@ -29,6 +29,7 @@
 使用方式:
 
 > npm i
+
 > node app.js
 
 ***
@@ -62,4 +63,5 @@ This chatroom used following library and programs, licensed under MIT license if
 Usage:
 
 > npm i
+
 > node app.js
